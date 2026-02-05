@@ -45,7 +45,7 @@ typedef enum
 	BOTH_BEAM
 } beam_t;
 
-typedef enum{
+typedef enum{			//enum for True and False
 	FALSE=0,
 	TRUE
 }boolean;
@@ -54,17 +54,18 @@ typedef enum{
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define ADC_CHANNEL_COUNT     4
+#define ADC_CHANNEL_COUNT     4		//Number of ADC Used
 
-#define FRONT_LDR_INDEX       0
-#define TOP_LDR_INDEX         1
-#define SMOKE_INDEX           2
-#define MOISTURE_INDEX        3
+//Indexes for DMA
+#define FRONT_LDR_INDEX       0		//Front LDR index
+#define TOP_LDR_INDEX         1		//top LDR index
+#define SMOKE_INDEX           2		//smoke sensor index
+#define MOISTURE_INDEX        3		//moisture sensor index
 
-#define PWM_MAX               99
-#define LOW_BEAM_PWM          59
-#define PWM_50				  39
-#define PWM_90				  79
+#define PWM_MAX               99	//MAX Brightness of LED
+#define LOW_BEAM_PWM          59	//Low Beam Brightness
+#define PWM_50				  39	//50% Brightness of LED
+#define PWM_90				  79	//90 Brightness of LED
 
 /* USER CODE END PD */
 
@@ -86,23 +87,24 @@ TIM_HandleTypeDef htim4;
 /* USER CODE BEGIN PV */
 
 /* ADC */
-uint16_t adc_dma_buffer[ADC_CHANNEL_COUNT];
+uint16_t adc_dma_buffer[ADC_CHANNEL_COUNT];		//ADC array for storing via DMA
 boolean adc_data_ready = FALSE;
 boolean RGB_ready=FALSE;
 
 /* Sensor values */
-uint16_t front_ldr;
-uint16_t top_ldr;
-uint16_t smoke;
-uint16_t moisture;
-uint16_t CCT;
-uint16_t lux;
+uint16_t front_ldr;				//Variable for storing front LDR value
+uint16_t top_ldr;				//Variable for storing top LDR value
+uint16_t smoke;					//Smoke value variable
+uint16_t moisture;				//Moisture value variable
+uint16_t CCT;					//Correlated Color Temperature
+uint16_t lux;					//Lumination of light
+
 /* State machine */
-system_state_t system_state = STATE_IDLE;
+system_state_t system_state = STATE_IDLE;	//Default State and variable for current state
 
 /* PWM */
-beam_t active_beam = BEAM_NONE;
-uint16_t target_pwm = 0;
+beam_t active_beam = BEAM_NONE;		//current active beam state
+uint16_t target_pwm = 0;			//PWM for Setting
 
 
 /* USER CODE END PV */
@@ -118,12 +120,12 @@ static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 
-void adc_start(void);
 void time_start(void);
-void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc);
-
-////////////////////////////////////////////////////
+void set_beam_pwm(beam_t, uint16_t );
+void process_sensors(void);
+void update_state_machine(void);
+void active_beam_selection(void);
+void apply_pwm(void);
 
 
 /* USER CODE END PFP */
@@ -133,10 +135,24 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc);
 
 //PWM starting
 void time_start(void){
+	/*					====  Formulae for Time in PWM  ====
+	   *
+	   *
+	   * 			T = (ARR+1) * (PSC+1) / F
+	   *
+	   * 		where, T   = Time we need PWM for
+	   * 			   ARR = Auto Reload Register for TImer in PWM
+	   * 			   PSC = Pre-scaler set for Timer to get required Time
+	   * 			   F   = Frequency of the Clock of STM
+	   *
+	   *	--> So here we will be configuring our LED brightness in 10 micro-seconds
+	   *	--> ADC Value sensing every 5ms
+	   *	--> RGB Value every 10ms for it to have adequate time for sensing values and converting
+	   * */
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-    htim3.Instance->CCR1=9;
-    htim4.Instance->CCR1=19;
+    htim3.Instance->CCR1=9;			//5ms Interrupt
+    htim4.Instance->CCR1=19;		//10ms interrupt
     HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
     HAL_TIM_OC_Start_IT(&htim4,TIM_CHANNEL_1);
 }
@@ -187,7 +203,7 @@ void set_beam_pwm(beam_t beam, uint16_t pwm){
 //Data Processing Logic
 void process_sensors(void)
 {
-    if (RGB_ready){
+    if (RGB_ready){			//if RGB data ready
     	uint16_t red,green,blue,clear;
     	getRGB(&red, &green, &blue,&clear);
     	CCT=calculateColorTemperature(red,green,blue,clear);
@@ -195,7 +211,7 @@ void process_sensors(void)
     	RGB_ready=FALSE;
     }
 
-    if (!adc_data_ready)
+    if (!adc_data_ready)	//if ADC data ready in DMA or Not
             return;
     adc_data_ready = FALSE;
     //HAVE TO CONFIGURE FOR PROCESSING CLOUDNESS WITH RAIN AND FOG AND LED BRIGHTNESS
@@ -243,8 +259,7 @@ void process_sensors(void)
 }
 
 //Updating States of Current Environment
-void update_state_machine(void)
-{
+void update_state_machine(void){
     switch (system_state)
     {
         case STATE_DAY:
@@ -290,7 +305,7 @@ void active_beam_selection(void){
 
 }
 
-
+//applying PWM to Circuit
 void apply_pwm(void)
 {
 	active_beam_selection();
@@ -335,7 +350,7 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-  time_start();
+  time_start();		//Time start when Powered On
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -437,7 +452,7 @@ static void MX_ADC1_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Channel = ADC_CHANNEL_0;		//front LDR sensor channel
   sConfig.Rank = 1;
   sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
@@ -447,7 +462,7 @@ static void MX_ADC1_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Channel = ADC_CHANNEL_1;		//top LDR sensor channel
   sConfig.Rank = 2;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
@@ -456,9 +471,8 @@ static void MX_ADC1_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_8;
+  sConfig.Channel = ADC_CHANNEL_8;		//smoke sensor channel
   sConfig.Rank = 3;
-  sConfig.SamplingTime = ADC_SAMPLETIME_144CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -466,7 +480,7 @@ static void MX_ADC1_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_11;
+  sConfig.Channel = ADC_CHANNEL_11;		//moisture sensor channel
   sConfig.Rank = 4;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
@@ -531,6 +545,8 @@ static void MX_TIM1_Init(void)
   /* USER CODE BEGIN TIM1_Init 1 */
 
   /* USER CODE END TIM1_Init 1 */
+
+
   htim1.Instance = TIM1;
   htim1.Init.Prescaler = 84;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
